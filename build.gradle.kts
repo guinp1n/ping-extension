@@ -5,14 +5,14 @@ plugins {
 }
 
 group = "com.hivemq.extensions"
-description = "HiveMQ 4 Hello World Extension - a simple reference for all extension developers"
+description = "HiveMQ 4 Ping Extension description"
 
 hivemqExtension {
-    name = "Hello World Extension"
+    name = "Ping Extension"
     author = "HiveMQ"
     priority = 1000
     startPriority = 1000
-    mainClass = "$group.helloworld.HelloWorldMain"
+    mainClass = "$group.ping.HelloWorldMain"
     sdkVersion = "$version"
 
     resources {

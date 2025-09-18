@@ -13,16 +13,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.hivemq.extensions.helloworld;
+package com.hivemq.extensions.ping;
 
 import com.hivemq.extension.sdk.api.ExtensionMain;
 import com.hivemq.extension.sdk.api.annotations.NotNull;
-import com.hivemq.extension.sdk.api.events.EventRegistry;
+import com.hivemq.extension.sdk.api.interceptor.pingreq.PingReqInboundInterceptor;
 import com.hivemq.extension.sdk.api.parameter.*;
 import com.hivemq.extension.sdk.api.services.Services;
-import com.hivemq.extension.sdk.api.services.intializer.InitializerRegistry;
+import com.hivemq.extension.sdk.api.services.session.ClientService;
+import com.hivemq.extension.sdk.api.services.session.SessionInformation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.BiConsumer;
 
 /**
  * This is the main class of the extension,
@@ -42,8 +47,40 @@ public class HelloWorldMain implements ExtensionMain {
             final @NotNull ExtensionStartOutput extensionStartOutput) {
 
         try {
-            addClientLifecycleEventListener();
-            addPublishModifier();
+            final PingReqInboundInterceptor interceptor = (pingReqInboundInput, pingReqInboundOutput) -> {
+
+                final String clientId = pingReqInboundInput.getClientInformation().getClientId();
+                log.info("PingReqInboundInterceptor intercepted a PINGREQ packet of client '{}'.", clientId);
+                final ClientService clientService = Services.clientService();
+                CompletableFuture<Optional<SessionInformation>> sessionFuture = clientService.getSession(clientId);
+
+                sessionFuture.whenComplete(new BiConsumer<Optional<SessionInformation>, Throwable>() {
+                    @Override
+                    public void accept(Optional<SessionInformation> sessionInformationOptional, Throwable throwable) {
+                        if (throwable == null) {
+
+                            if (sessionInformationOptional.isPresent()) {
+                                SessionInformation information = sessionInformationOptional.get();
+                                log.info("PingReqInboundInterceptor says Session Found");
+                                log.info("PingReqInboundInterceptor says ID: " + information.getClientIdentifier());
+                                log.info("PingReqInboundInterceptor says Connected: " + information.isConnected());
+                                log.info("PingReqInboundInterceptor says Session Expiry Interval " + information.getSessionExpiryInterval());
+                            } else {
+                                log.info("PingReqInboundInterceptor says No session found for client id: " + clientId);
+                            }
+
+                        } else {
+                            //please use more sophisticated logging
+                            throwable.printStackTrace();
+                        }
+                    }
+                });
+
+            };
+
+            Services.initializerRegistry().setClientInitializer((initializerInput, clientContext) -> {
+                clientContext.addPingReqInboundInterceptor(interceptor);
+            });
 
             final ExtensionInformation extensionInformation = extensionStartInput.getExtensionInformation();
             log.info("Started " + extensionInformation.getName() + ":" + extensionInformation.getVersion());
@@ -60,22 +97,5 @@ public class HelloWorldMain implements ExtensionMain {
 
         final ExtensionInformation extensionInformation = extensionStopInput.getExtensionInformation();
         log.info("Stopped " + extensionInformation.getName() + ":" + extensionInformation.getVersion());
-    }
-
-    private void addClientLifecycleEventListener() {
-        final EventRegistry eventRegistry = Services.eventRegistry();
-
-        final HelloWorldListener helloWorldListener = new HelloWorldListener();
-
-        eventRegistry.setClientLifecycleEventListener(input -> helloWorldListener);
-    }
-
-    private void addPublishModifier() {
-        final InitializerRegistry initializerRegistry = Services.initializerRegistry();
-
-        final HelloWorldInterceptor helloWorldInterceptor = new HelloWorldInterceptor();
-
-        initializerRegistry.setClientInitializer(
-                (initializerInput, clientContext) -> clientContext.addPublishInboundInterceptor(helloWorldInterceptor));
     }
 }
